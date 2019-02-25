@@ -33,6 +33,7 @@ private:
     SharedBufferPool<ScGPUImage *> *m_image_pools[9];
     ScGPUImage *m_gpu_image;
     ScGPUImage *m_gpu_imageRGBA;
+    ScGPUImage *m_gpu_imageRGBA_swap;
 
     void renderToOpenGlTexure(ScGPUImage *image, int wid);
 

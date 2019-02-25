@@ -17,6 +17,11 @@ __device__ u_char clamp(float t)
     return t;
 }
 
+inline unsigned int divUpper(int l, int dimension)
+{
+    return (l - 1) / dimension + 1;
+}
+
 __global__ void
 kernel_colorSpaceYUV420PToRGBA(dev_t *src, dev_t *dst, int pitch_src, int pitch_dst, int w, int h)
 {
@@ -90,6 +95,47 @@ void ColorSpaceConvertion(ScGPUImage *src, ScGPUImage *dst)
             break;
         }
     }
+}
+
+__global__ void
+kernel_horizontalReversal(dev_t *src, dev_t *dst, uint pitch_src, uint pitch_dst, uint pixel_w, uint pixel_h)
+{
+    unsigned int dim_x = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int dim_y = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (dim_x < pixel_w && dim_y < pixel_h) {
+        unsigned int rgba = *((uint32_t*)src + dim_y * pitch_src / 4 + dim_x);
+        *((uint32_t*)dst + dim_y * pitch_dst / 4 + pixel_w - dim_x) = rgba;
+    }
+}
+
+__global__ void
+kernel_verticalReversal(dev_t *src, dev_t *dst, uint pitch_src, uint pitch_dst, uint pixel_w, uint pixel_h)
+{
+    unsigned int dim_x = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int dim_y = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (dim_x < pixel_w && dim_y < pixel_h) {
+        unsigned int rgba = *((uint32_t*)src + dim_y * pitch_src / 4 + dim_x);
+        *((uint32_t*)dst + (pixel_h - dim_y) * pitch_dst / 4 + dim_x) = rgba;
+    }
+}
+
+void HorizontalReversalRGBA(ScGPUImage *src, ScGPUImage *dst)
+{
+    dim3 block(8, 8);
+    dim3 grid(divUpper(src->m_pixel_width, block.x), divUpper(src->m_pixel_height, block.y));
+    kernel_horizontalReversal<<<grid, block>>>(src->m_dev_addr, dst->m_dev_addr, src->m_data_width, dst->m_data_width,
+                                               src->m_pixel_width, src->m_pixel_height);
+
+}
+
+void VerticalReversalRGBA(ScGPUImage *src, ScGPUImage *dst)
+{
+    dim3 block(8, 8);
+    dim3 grid(divUpper(src->m_pixel_width, block.x), divUpper(src->m_pixel_height, block.y));
+    kernel_verticalReversal<<<grid, block>>>(src->m_dev_addr, dst->m_dev_addr, src->m_data_width, dst->m_data_width,
+                                             src->m_pixel_width, src->m_pixel_height);
 }
 
 __global__ void

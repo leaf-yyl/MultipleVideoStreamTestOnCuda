@@ -1,8 +1,6 @@
 #ifndef INPUTFILEPARSER_H
 #define INPUTFILEPARSER_H
 
-#include <QThread>
-
 #include "inputparser.h"
 
 class InputFileParser : public InputParser
@@ -18,6 +16,10 @@ protected:
 
 private:
     QString m_filepath;
+
+    void emitSignalSetDecoder(AVCodecID, int, void *);
+    void emitSignalPacketReady(void *sp, void *pkt_pool);
+    void emitSignalParserDone();
 };
 
 #endif // INPUTFILEPARSER_H

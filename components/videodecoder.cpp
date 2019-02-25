@@ -8,23 +8,15 @@ extern "C" {
 
 #include "videodecoder.h"
 
-VideoDecoder::VideoDecoder(QObject *parent) : QObject(parent)
+VideoDecoder::VideoDecoder()
 {
-    m_ctx    = nullptr;
     m_iFrameDecoded = 0;
-    m_frame = av_frame_alloc();
+    m_ctx   = nullptr;
+    m_frame = nullptr;
 }
 
 VideoDecoder::~VideoDecoder()
 {
-    if (nullptr != m_ctx) {
-        if (m_ctx->extradata_size != 0) {
-            free( m_ctx->extradata );
-        }
-        avcodec_free_context(&m_ctx);
-    }
-
-    av_frame_free(&m_frame);
 }
 
 void VideoDecoder::setFlag(unsigned int flag)
@@ -49,6 +41,7 @@ void VideoDecoder::slot_setDecoderId(AVCodecID id, int size, void *extra_data)
         return;
     }
 
+    /* set essential infos for decoder context */
     m_ctx->thread_count = 1;
     if (codec->capabilities & AV_CODEC_CAP_TRUNCATED) {
         m_ctx->flags |= AV_CODEC_FLAG_TRUNCATED;
@@ -64,6 +57,7 @@ void VideoDecoder::slot_setDecoderId(AVCodecID id, int size, void *extra_data)
         return ;
     }
 
+    m_frame = av_frame_alloc();
     qDebug("Video decoder has been created in thread %d!", m_flag);
 }
 
@@ -72,32 +66,26 @@ void VideoDecoder::slot_packetReady(void *var1, void *var2)
     int ret = 0;
     int got_picture = 0;
 
-//    qDebug("Recieve packet in thread %d!", m_flag);
-
     SharedReusableAvPacket *pkt = (SharedReusableAvPacket *)var1;
     SharedBufferPool<SharedReusableAvPacket *> *pkt_stream = (SharedBufferPool<SharedReusableAvPacket *> *) var2;
     if (nullptr != m_ctx) {
 
+        /* generate the first decoded frame */
         AVFrame *frame = m_frame_pool->getFreeBuffer();
-//        qDebug("Get free frame in thread %d!", m_flag);
-
         if (0 == m_iFrameDecoded) {
             ret = avcodec_decode_video2(m_ctx, m_frame, &got_picture, pkt->getAvPacket());
             if (got_picture && (ret >= 0)) {
-                m_iFrameDecoded++;
                 if (nullptr == frame->data[0]) {
                     av_image_alloc(frame->data, frame->linesize, m_frame->width, m_frame->height, m_frame->format, 64);
                 }
                 av_frame_copy(frame, m_frame);
                 av_frame_copy_props(frame, m_frame);
                 frame->format = m_frame->format;
-                frame->width = m_frame->width;
+                frame->width  = m_frame->width;
                 frame->height = m_frame->height;
                 emitFrameReadySignal(frame, m_frame_pool, m_flag);
             } else {
                 m_frame_pool->returnFreeBuffer(frame);
-                char err[64] = {0};
-                qDebug( av_make_error_string(err, 64, ret) );
             }
         } else {
             if (nullptr == frame->data[0]) {
@@ -106,15 +94,16 @@ void VideoDecoder::slot_packetReady(void *var1, void *var2)
 
             ret = avcodec_decode_video2(m_ctx, frame, &got_picture, pkt->getAvPacket());
             if (got_picture && (ret >= 0)) {
-                m_iFrameDecoded++;
                 emitFrameReadySignal(frame, m_frame_pool, m_flag);
             } else {
-                qDebug("Return free frame in thread %d!", m_flag);
                 m_frame_pool->returnFreeBuffer(frame);
             }
         }
+    } else {
+        qDebug("Decodec context is not established!");
     }
 
+    /* THe code below should be arranged more logically */
     pkt->lock();
     pkt->addCurFlag(m_flag);
     if (pkt->isFree()) {
@@ -122,8 +111,6 @@ void VideoDecoder::slot_packetReady(void *var1, void *var2)
         pkt_stream->returnFreeBuffer(pkt);
     }
     pkt->unlock();
-
-//    qDebug("Genrerate packet done in tHread %d!", m_flag);
 }
 
 void VideoDecoder::slot_packetDone()
@@ -139,11 +126,14 @@ void VideoDecoder::slot_packetDone()
             if (0 == m_iFrameDecoded) {
                 ret = avcodec_decode_video2(m_ctx, m_frame, &got_picture, pkt);
                 if (got_picture && (ret >= 0)) {
-                    m_iFrameDecoded++;
                     if (nullptr == frame->data[0]) {
                         av_image_alloc(frame->data, frame->linesize, m_frame->width, m_frame->height, m_frame->format, 64);
                     }
                     av_frame_copy(frame, m_frame);
+                    av_frame_copy_props(frame, m_frame);
+                    frame->format = m_frame->format;
+                    frame->width  = m_frame->width;
+                    frame->height = m_frame->height;
                     emitFrameReadySignal(frame, m_frame_pool, m_flag);
                 } else {
                     m_frame_pool->returnFreeBuffer(frame);
@@ -155,7 +145,6 @@ void VideoDecoder::slot_packetDone()
 
                 ret = avcodec_decode_video2(m_ctx, frame, &got_picture, pkt);
                 if (got_picture && (ret >= 0)) {
-                    m_iFrameDecoded++;
                     emitFrameReadySignal(frame, m_frame_pool, m_flag);
                 } else {
                     m_frame_pool->returnFreeBuffer(frame);
@@ -166,8 +155,19 @@ void VideoDecoder::slot_packetDone()
 
     av_packet_free(&pkt);
     qDebug("Video decoder %d has decoded %d frames!", m_flag, m_iFrameDecoded);
-}
 
+    if (nullptr != m_frame) {
+        av_frame_free(&m_frame);
+        m_frame = nullptr;
+    }
+
+    if (nullptr != m_ctx) {
+        avcodec_free_context(&m_ctx);
+        m_ctx = nullptr;
+    }
+
+    emitSignalDecoderDone();
+}
 
 void VideoDecoder::emitFrameReadySignal(AVFrame *frame, SharedBufferPool<AVFrame *> *frame_pool, int sid)
 {
@@ -175,5 +175,11 @@ void VideoDecoder::emitFrameReadySignal(AVFrame *frame, SharedBufferPool<AVFrame
         qDebug("Unexpected pixel format!");
     }
 
-    emit signal_FrameReady2(frame, frame_pool, sid);
+    m_iFrameDecoded++;
+    emit signal_FrameReady(frame, frame_pool, sid);
+}
+
+void VideoDecoder::emitSignalDecoderDone()
+{
+    emit signal_decoderDone(this);
 }

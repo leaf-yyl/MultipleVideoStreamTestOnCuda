@@ -49,6 +49,26 @@ public:
         m_mutex.unlock();
     }
 
+    /* for temporary use */
+    void popSpecifiedElement(T t) {
+        m_mutex.lock();
+        if (ml_data.isEmpty()) {
+            m_cond.wait(&m_mutex);
+        }
+
+        for (int i = 0; i < ml_data.size(); i++)
+        {
+            if (t == ml_data.at(i))
+            {
+                ml_data.takeAt(i);
+                break;
+            }
+        }
+        m_mutex.unlock();
+
+        return ;
+    }
+
 protected:
     QMutex         m_mutex;
     QWaitCondition m_cond;

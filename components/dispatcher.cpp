@@ -1,4 +1,5 @@
 
+#include <QTime>
 #include <QDebug>
 #include <QImage>
 #include <QThread>
@@ -17,12 +18,14 @@ Dispatcher::Dispatcher(QObject *parent) : QObject(parent)
     m_iFrameRecieved = 0;
     m_gpu_image      = new ScGPUImage();
     m_gpu_imageRGBA  = new ScGPUImage();
+    m_gpu_imageRGBA_swap  = new ScGPUImage();
 }
 
 Dispatcher::~Dispatcher()
 {
     delete m_gpu_image;
     delete m_gpu_imageRGBA;
+    delete m_gpu_imageRGBA_swap;
 }
 
 void Dispatcher::setGpuImageBufferPool(SharedBufferPool<ScGPUImage *> *image_pool)
@@ -44,6 +47,10 @@ void Dispatcher::slot_frameReady(AVFrame *frame, SharedBufferPool<AVFrame *> *fr
 {
     m_iFrameRecieved++;
 
+    static unsigned int time_elapsed = 0;
+    QTime time;
+    time.start();
+
     ScGPUImage::enScPixFormat pix_fmt = ScGPUImage::getScPixFormat(frame->format);
     if (ScGPUImage::ScPixFormat_Unknown == pix_fmt) {
         frame_stream->returnFreeBuffer(frame);
@@ -56,19 +63,24 @@ void Dispatcher::slot_frameReady(AVFrame *frame, SharedBufferPool<AVFrame *> *fr
     int wid = getWid(sid);
 
     m_gpu_imageRGBA->resize(m_gpu_image->m_pixel_width, m_gpu_image->m_pixel_height, ScGPUImage::ScPixFormat_RGBA);
+    m_gpu_imageRGBA_swap->resize(m_gpu_image->m_pixel_width, m_gpu_image->m_pixel_height, ScGPUImage::ScPixFormat_RGBA);
     ColorSpaceConvertion(m_gpu_image, m_gpu_imageRGBA);
-    renderToOpenGlTexure(m_gpu_imageRGBA, wid);
+    if (wid == 1) {
+        HorizontalReversalRGBA(m_gpu_imageRGBA, m_gpu_imageRGBA_swap);
+        renderToOpenGlTexure(m_gpu_imageRGBA_swap, wid);
+    } else if (wid == 2){
+        VerticalReversalRGBA(m_gpu_imageRGBA, m_gpu_imageRGBA_swap);
+        renderToOpenGlTexure(m_gpu_imageRGBA_swap, wid);
+    } else {
+        renderToOpenGlTexure(m_gpu_imageRGBA, wid);
+    }
 
     emit signal_dispatchResult(wid);
 
-//    qDebug("Recieve frame from thread %d, total %d frames!", sid, m_iFrameRecieved);
-
-    if (1000 == m_iFrameRecieved) {
-        savePicture(frame, "/home/leaf_yyl/Pictures/test0.png");
-        cudaMemcpy2D(frame->data[0], frame->linesize[0], m_gpu_image->m_dev_addr, m_gpu_image->m_data_width,
-                     frame->linesize[0], frame->height * 3 / 2, cudaMemcpyDeviceToHost);
-        savePicture(frame, "/home/leaf_yyl/Pictures/test1.png");
-        savePicture(m_gpu_imageRGBA, "/home/leaf_yyl/Pictures/test2.png");
+    time_elapsed += time.elapsed();
+    if (m_iFrameRecieved % 200 == 0) {
+        qDebug("Recieve total %d frames in %d milli seconds, currunt frame comes from thread %d!",
+               m_iFrameRecieved, time_elapsed, sid);
     }
 
     frame_stream->returnFreeBuffer(frame);

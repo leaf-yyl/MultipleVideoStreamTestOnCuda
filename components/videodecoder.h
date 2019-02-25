@@ -15,7 +15,7 @@ class VideoDecoder : public QObject
 {
     Q_OBJECT
 public:
-    explicit VideoDecoder(QObject *parent = 0);
+    explicit VideoDecoder();
     ~VideoDecoder();
 
     void setFlag(unsigned int flag);
@@ -24,6 +24,7 @@ public:
 signals:
     void signal_FrameReady(AVFrame *, SharedBufferPool<AVFrame *> *, int);
     void signal_FrameReady2(void *, void *, int);
+    void signal_decoderDone(VideoDecoder *);
 
 public slots:
     void slot_setDecoderId(AVCodecID id, int size, void *extra_data);
@@ -41,6 +42,7 @@ private:
     AVCodecContext *m_ctx;
 
     void emitFrameReadySignal(AVFrame *frame, SharedBufferPool<AVFrame *> *frame_pool, int sid);
+    void emitSignalDecoderDone();
 };
 
 #endif // VIDEODECODER_H

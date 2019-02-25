@@ -51,11 +51,8 @@ public:
     T getFreeBuffer() {
         m_mutex->lock();
 
-        int i = 0;
         while (ml_free_buffer.isEmpty()) {
-            qDebug (" Try free buffer for %d times", i++);
             m_cond_free->wait(m_mutex);
-            qDebug (" Try free buffer for %d times", i);
         }
 
         T t = ml_free_buffer.takeFirst();
@@ -73,7 +70,7 @@ public:
 
     T getReadyBuffer() {
         m_mutex->lock();
-        if (ml_ready_buffer.isEmpty()) {
+        while (ml_ready_buffer.isEmpty()) {
             m_cond_ready->wait(m_mutex);
         }
 

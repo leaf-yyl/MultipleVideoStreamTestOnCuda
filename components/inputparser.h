@@ -7,6 +7,7 @@ extern "C"{
 
 #include <QThread>
 
+#include "utils/sharedlist.h"
 #include "utils/sharedbufferpool.h"
 #include "utils/sharedreusableavpacket.h"
 
@@ -21,20 +22,29 @@ public:
 
     enum enReturnCode {
         InputParserSuccess = 0x01,
+        InpuParserUserCancel,
+        InputParserError_InvalidVideoStreamOrFile,
+        InputParserError_NoVideoStream,
         InputParserError
     };
+    enReturnCode getReturnCode();
+    void stopAndWaitForParserDone();
 
 signals:
     void signal_setDecoder(AVCodecID, int, void *);
     void signal_packetReady(void *, void *);
-    void signal_parserDone();
+    void signal_parserDone(InputParser *);
 
 public slots:
 
 protected:
-    int m_packet_num;
-    enReturnCode m_ret;
+    volatile bool m_stop;       /* volatile is sufficient */
+    enReturnCode  m_ret;
+    SharedList<InputParser *> *m_parser_list;
     SharedBufferPool<SharedReusableAvPacket *> *m_pkt_pool;
+
+    int  m_packet_num;
+    void logPacketNum();
 };
 
 #endif // INPUTPARSER_H
