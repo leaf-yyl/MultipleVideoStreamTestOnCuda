@@ -55,6 +55,11 @@ private:
 
     /* all parsers that is running */
     SharedList<InputParser *> ml_parser;
+
+    /* TODO:a simple thread pool, need to move controller and opengl
+     * operations to threads instead of in UI thread */
+    QList<QThread *> ml_decoderthreads;
+    QThread *findFreeThread();
 };
 
 #endif // CONTROLLER_H

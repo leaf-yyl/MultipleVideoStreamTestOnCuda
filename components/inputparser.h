@@ -28,7 +28,7 @@ public:
         InputParserError
     };
     enReturnCode getReturnCode();
-    void stopAndWaitForParserDone();
+    void stop(bool wait = false);
 
 signals:
     void signal_setDecoder(AVCodecID, int, void *);

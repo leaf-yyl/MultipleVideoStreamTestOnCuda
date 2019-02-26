@@ -17,6 +17,12 @@ Controller::Controller(QObject *parent) : QObject(parent)
         m_frame_pool.returnFreeBuffer(frame);
     }
 
+    for (int i = 0; i < TEST_NUM * 2; i++)
+    {
+        QThread *thread = new QThread(this);
+        ml_decoderthreads.append(thread);
+    }
+
     m_parser = nullptr;
 
     m_dispatcher.moveToThread(&m_dispatcher_thread);
@@ -49,15 +55,17 @@ void Controller::addInputFile(QString filepath)
 {
     closeInputStream();
 
-    m_parser = new InputFileParser(this);
+    m_parser = new InputFileParser();
+
     m_parser->setInput(filepath);
     m_parser->setBufferPool(&m_pkt_pool);
     ml_parser.push(m_parser);
 
     for (int i = 0; i < TEST_NUM; i++)
     {
+        QThread *thread = findFreeThread();
         ma_decoder[i] = new VideoDecoder();
-        ma_decoder[i]->moveToThread(ma_decoder_thread + i);
+        ma_decoder[i]->moveToThread(thread);
         ma_decoder[i]->setFrameBufferPool(&m_frame_pool);
         ma_decoder[i]->setFlag(1 << i);
 
@@ -66,7 +74,6 @@ void Controller::addInputFile(QString filepath)
         connect(m_parser, SIGNAL(signal_packetReady(void*,void*)),
                 ma_decoder[i], SLOT(slot_packetReady(void*,void*)));
         connect(m_parser, SIGNAL(finished()), ma_decoder[i], SLOT(slot_packetDone()));
-        connect(m_parser, SIGNAL(signal_parserDone(InputParser*)), this, SLOT(slot_parserDone(InputParser*)));
         connect(ma_decoder[i], SIGNAL(signal_decoderDone(VideoDecoder*)), this, SLOT(slot_decoderDone(VideoDecoder*)));
 
         connect(ma_decoder[i], SIGNAL(signal_FrameReady(AVFrame *, SharedBufferPool<AVFrame *> *, int)),
@@ -74,16 +81,17 @@ void Controller::addInputFile(QString filepath)
         connect(ma_decoder[i], SIGNAL(signal_FrameReady2(void *, void *, int)),
                 &m_dispatcher, SLOT(slot_frameReady2(void*, void *,int)));
 
-        ma_decoder_thread[i].start();
+        thread->start();
     }
 
+    connect(m_parser, SIGNAL(signal_parserDone(InputParser*)), this, SLOT(slot_parserDone(InputParser*)));
     m_parser->start();
 }
 
 void Controller::closeInputStream()
 {
     if (nullptr != m_parser) {
-        m_parser->stopAndWaitForParserDone();
+        m_parser->stop();
         m_parser = nullptr;
     }
 }
@@ -106,5 +114,27 @@ void Controller::slot_parserDone(InputParser *parser)
 
 void Controller::slot_decoderDone(VideoDecoder *decoder)
 {
+    decoder->thread()->quit();
     delete decoder;
+}
+
+QThread* Controller::findFreeThread()
+{
+    QThread *thread = nullptr;
+    while (nullptr == thread)
+    {
+        for (int i = 0; i < ml_decoderthreads.size(); i++)
+        {
+            if (!ml_decoderthreads[i]->isRunning()) {
+                thread = ml_decoderthreads[i];
+                break;
+            }
+        }
+
+        if(nullptr == thread) {
+            QThread::msleep(30);
+        }
+    }
+
+    return thread;
 }

@@ -8,6 +8,7 @@ class InputFileParser : public InputParser
     Q_OBJECT
 public:
     explicit InputFileParser(QObject *parent = 0);
+    ~InputFileParser();
 
     void setInput(QString path) override;
 

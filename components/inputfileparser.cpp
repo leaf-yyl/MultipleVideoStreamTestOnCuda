@@ -16,6 +16,11 @@ InputFileParser::InputFileParser(QObject *parent) : InputParser(parent)
     m_ret = InputParserSuccess;
 }
 
+InputFileParser::~InputFileParser()
+{
+
+}
+
 void InputFileParser::setInput(QString path)
 {
     m_filepath = path;

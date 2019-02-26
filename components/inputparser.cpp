@@ -18,11 +18,13 @@ InputParser::enReturnCode InputParser::getReturnCode()
     return m_ret;
 }
 
-void InputParser::stopAndWaitForParserDone()
+void InputParser::stop(bool wait)
 {
     m_stop = true;
-    while (isRunning()) {
-        msleep(50);
+    if (wait) {
+        while (isRunning()) {
+            msleep(50);
+        }
     }
 }
 
