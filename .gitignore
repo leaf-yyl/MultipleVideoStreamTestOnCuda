@@ -5,3 +5,5 @@
 
 # no backup files
 *~
+# no user files
+*.user
