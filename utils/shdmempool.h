@@ -15,13 +15,13 @@ public:
 
     bool init(int capacity, bool owner = true);
 
-    QSharedMemory* getFreeSharedMem(int size);
-    void setData(QSharedMemory *shd, void *data, int size);
-    void returnReadySharedMem(QSharedMemory *shd);
+    int getFreeSharedMemId(int size);
+    void writeData(int id, void *data, int size);
+    void returnReadySharedMem(int id);
 
-    QSharedMemory* getReadySharedMem();
-    void readData(QSharedMemory *shd, void *data, int size);
-    void returnFreeSharedMem(QSharedMemory *shd);
+    int getReadySharedMem();
+    void readData(int id, void *data, int size);
+    void returnFreeSharedMem(int id);
 
 private:
     /* Singleton class */
@@ -47,7 +47,7 @@ private:
     QSharedMemory *m_shd_ready;
 
     int  m_capacity;
-    int  m_cur_index;
+    bool m_owner;
     QList<QSharedMemory *> ml_shd_mem;
 
     void detachAll();
